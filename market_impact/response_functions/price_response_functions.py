@@ -4,6 +4,7 @@ from typing import List
 
 from market_impact.util.utils import normalize_aggregate_impact, normalize_imbalance
 
+
 def _price_response_function(df_: pd.DataFrame, lag: int = 1, log_prices=False) -> pd.DataFrame:
     """
     : math :
