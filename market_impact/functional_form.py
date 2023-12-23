@@ -1,7 +1,10 @@
 import numpy as np
 import pandas as pd
 
+
 # TODO: add functional form of conditional and unconditional R(1, v) and R(l) and Neural network
+
+
 def scaling_function(x: np.ndarray, alpha: float, beta: float, CONST) -> np.ndarray:
     """
     Apply the scaling function to a given array.
@@ -26,7 +29,9 @@ def scaling_function(x: np.ndarray, alpha: float, beta: float, CONST) -> np.ndar
     return x / np.power(1 + np.power(np.abs(x), alpha), beta / alpha) * CONST
 
 
-def scaling_form(orderflow_imbalance: pd.DataFrame, RN: float, QN: float, alpha: float, beta: float, CONST: float) -> np.ndarray:
+def scaling_form(
+    orderflow_imbalance: pd.DataFrame, RN: float, QN: float, alpha: float, beta: float, CONST: float
+) -> np.ndarray:
     """
     Apply the scaling form to order flow imbalances.
 
@@ -41,7 +46,7 @@ def scaling_form(orderflow_imbalance: pd.DataFrame, RN: float, QN: float, alpha:
     is a constant factor in the scaling form.
 
     Parameters:
-    - orderflow_imbalance (pd.DataFrame): A DataFrame containing the columns 'vol_imbalance' and 'T'.
+    - orderflow_imbalance (pd.DataFrame): A DataFrame containing the columns 'volume_imbalance' and 'T'.
     - RN (float): Rescaling factor for the return scale.
     - QN (float): Rescaling factor for the volume scale.
     - alpha (float): The alpha parameter for the scaling function.
@@ -51,9 +56,11 @@ def scaling_form(orderflow_imbalance: pd.DataFrame, RN: float, QN: float, alpha:
     Returns:
     - np.ndarray: An array of scaled order flow imbalances.
     """
+
     # Extract imbalance and T from the DataFrame
     T = orderflow_imbalance["T"].values
-    imbalance = orderflow_imbalance["vol_imbalance"].values
+
+    imbalance = orderflow_imbalance["imbalance"].values
 
     # Apply the scaling function to the rescaled imbalance
     rescaled_imbalance = imbalance / (QN * T)
@@ -62,7 +69,9 @@ def scaling_form(orderflow_imbalance: pd.DataFrame, RN: float, QN: float, alpha:
     return (RN * T) * scaled_imbalance * CONST
 
 
-def scaling_law(orderflow_imbalance: pd.DataFrame, chi: float, kappa: float, alpha: float, beta: float, CONST: float) -> np.ndarray:
+def scaling_law(
+    orderflow_imbalance: pd.DataFrame, chi: float, kappa: float, alpha: float, beta: float, CONST: float
+) -> np.ndarray:
     """
     Apply the scaling law to order flow imbalances.
 
@@ -76,7 +85,7 @@ def scaling_law(orderflow_imbalance: pd.DataFrame, chi: float, kappa: float, alp
     is a constant factor in the scaling law.
 
     Parameters:
-    - orderflow_imbalance (pd.DataFrame): A DataFrame containing the columns 'vol_imbalance' and 'T'.
+    - orderflow_imbalance (pd.DataFrame): A DataFrame containing the columns 'volume_imbalance' and 'T'.
     - chi (float): The chi exponent in the scaling law.
     - kappa (float): The kappa exponent in the scaling law.
     - alpha (float): The alpha parameter for the scaling function.
@@ -86,14 +95,13 @@ def scaling_law(orderflow_imbalance: pd.DataFrame, chi: float, kappa: float, alp
     Returns:
     - np.ndarray: An array of scaled order flow imbalances according to the scaling law.
     """
+
     # Extract imbalance over some T from the DataFrame
     T = orderflow_imbalance["T"].values
-    imbalance = orderflow_imbalance["vol_imbalance"].values
-
+    imbalance = orderflow_imbalance["imbalance"].values
 
     # Rescale imbalance according to kappa
     rescaled_imbalance = imbalance / np.power(T, kappa)
-
 
     # Apply the scaling function
     scaled_imbalance = scaling_function(rescaled_imbalance, alpha, beta, CONST)

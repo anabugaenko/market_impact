@@ -3,27 +3,52 @@ import pandas as pd
 from scipy import stats
 
 
-def normalize_aggregate_impact(aggregate_impact: pd.DataFrame):
-    # Rescale R/R(1)
+def normalize_imbalances(orderbook_states: pd.DataFrame, normalization_constant: str = "daily_volume") -> pd.DataFrame:
+    # TODO: add option to normalise by average volume at top of queue, make consistent with normalze_size
+    data = orderbook_states.copy()
 
-    # Data
+    # Rescale imbalance columns
+    if "volume_imbalance" in data.columns:
+        data["volume_imbalance"] = data["volume_imbalance"] / data["daily_vol"]
+    if "sign_imbalance" in data.columns:
+        data["sign_imbalance"] = data["sign_imbalance"] / data["daily_num"]
+
+    return data
+
+
+def normalize_conditional_impact(aggregate_impact: pd.DataFrame) -> pd.DataFrame:
+    """
+    Rescale the aggregate impact 'R' in the provided DataFrame by its daily corresponding value 'R(1)'.
+
+    The function assumes that the DataFrame contains the columns 'R' for aggregate impact and 'daily_R1'
+    that defines a characteristic size or length. The normalization is performed by dividing 'R' by the
+     absolute value of 'daily_R1', where we use 'abs' to preserve the sign when the average order signs
+     are negative.
+
+    Parameters:
+    - aggregate_impact (pd.DataFrame): DataFrame containing the aggregate impact data.
+      Expected to have columns 'R' and 'daily_R1'.
+
+    Returns:
+    - pd.DataFrame: DataFrame with the normalized 'R' values.
+
+    Note:
+    - It is assumed that 'daily_R1' represents a constant of unit dimension that define a
+      character size or length (base value) for normalization.
+    """
+
+    # Creating a copy to avoid modifying the original DataFrame
     df = aggregate_impact.copy()
+
+    # Normalizing 'R' by its daily corresponding value 'R(1)' (represented as 'daily_R1')
     if "R" in df.columns:
-        df["R"] = df["R"] / df["daily_R1"]
+        # Ensure that the signs of 'R' aren't inverted
+        df["R"] = df["R"] / abs(df["daily_R1"])
 
     return df
 
 
-def normalize_imbalance(df: pd.DataFrame) -> pd.DataFrame:
-    # TODO: Normalise by average volume at top of queue
-    if "vol_imbalance" in df.columns:
-        df["vol_imbalance"] = df["vol_imbalance"] / df["daily_vol"]
-    if "sign_imbalance" in df.columns:
-        df["sign_imbalance"] = df["sign_imbalance"] / df["daily_num"]
-    return df
-
-
-def bin_data_into_quantiles(df, x_col="vol_imbalance", y_col="R", q=100, duplicates="raise"):
+def bin_data_into_quantiles(df, x_col="volume_imbalance", y_col="R", q=100, duplicates="raise"):
     """
     Returns binned series.
     """
@@ -47,7 +72,12 @@ def bin_data_into_quantiles(df, x_col="vol_imbalance", y_col="R", q=100, duplica
 
 
 def smooth_outliers(
-    df: pd.DataFrame, T=None, columns=["vol_imbalance", "sign_imbalance", "R"], std_level=2, remove=False, verbose=False
+    df: pd.DataFrame,
+    T=None,
+    columns=["volume_imbalance", "sign_imbalance", "R"],
+    std_level=2,
+    remove=False,
+    verbose=False,
 ):
     # TODO: default columns to None
     """
@@ -85,5 +115,3 @@ def smooth_outliers(
             df[name] = winsorize_queue(s, level=std_level)
 
     return df
-
-
