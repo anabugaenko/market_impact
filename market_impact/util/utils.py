@@ -3,6 +3,15 @@ import pandas as pd
 from scipy import stats
 
 
+def _check_imbalance_validity(imbalance_column: str):
+    """
+    Validates if the given conditional variables are supported.
+    """
+    valid_imbalance_columns = ["sign_imbalance", "volume_imbalance"]
+    if imbalance_column not in valid_imbalance_columns:
+        raise ValueError(f"Unknown imbalance column: {imbalance_column}. Expected one of {valid_imbalance_columns}.")
+
+
 def normalize_imbalances(orderbook_states: pd.DataFrame, normalization_constant: str = "daily_volume") -> pd.DataFrame:
     # TODO: add option to normalise by average volume at top of queue, make consistent with normalze_size
     data = orderbook_states.copy()

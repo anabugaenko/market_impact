@@ -5,7 +5,7 @@ from scipy.optimize import least_squares
 
 from powerlaw_function import Fit
 
-from market_impact.util.utils import bin_data_into_quantiles
+from market_impact.util.utils import bin_data_into_quantiles, _check_imbalance_validity
 from market_impact.functional_form import scaling_form, scaling_law
 
 # Fixme: have single source for least squars fitting, where we pass hyperparams as options
@@ -35,42 +35,6 @@ class ScalingLawFitResult:
         self.T = T
         self.params = params
         self.data = data
-
-
-def _check_imbalance_validity(imbalance_column: str):
-    """Validates if the given conditional variables are supported."""
-    valid_imbalance_columns = ["sign_imbalance", "volume_imbalance"]
-    if imbalance_column not in valid_imbalance_columns:
-        raise ValueError(f"Unknown imbalance column: {imbalance_column}. Expected one of {valid_imbalance_columns}.")
-
-
-def fit_known_scaling_form(T_values, imbalance_values, R_values, known_alpha, known_beta, reflect_y=False):
-    """
-    Fits a scaling form with known parameters alpha and beta from scaling function
-    """
-
-    # Create orderflow imbalance DataFrame from T_values and volume_imbalance_values
-    orderflow_imbalance = pd.DataFrame({"T": T_values, "imbalance": imbalance_values})
-
-    # Fit scaling form reflection where we invert the scaling function along the x-axis
-    if reflect_y:
-        orderflow_imbalance["imbalance"] = orderflow_imbalance["imbalance"] * (-1)
-
-    # Define a scaling form with known parameters
-    def _known_scaling_form(data: pd.DataFrame, RN: float, QN: float, CONST: float) -> float:
-        """
-        This version treats RN and QN as constants to be found during optimization.
-        """
-        return scaling_form(data, RN, QN, known_alpha, known_beta, CONST)
-
-    def _residuals(params, data, y):
-        return y - _known_scaling_form(data, *params)
-
-    initial_guess = [0.1, 0.1, 0.1]
-
-    result = least_squares(_residuals, initial_guess, loss="soft_l1", args=(orderflow_imbalance, R_values))
-
-    return result.x
 
 
 def fit_scaling_form(T_values, imbalance_values, R_values, reflect_y=False):
@@ -104,6 +68,35 @@ def fit_scaling_form(T_values, imbalance_values, R_values, reflect_y=False):
     return result.x
 
 
+def fit_known_scaling_form(T_values, imbalance_values, R_values, known_alpha, known_beta, reflect_y=False):
+    """
+    Fits a scaling form with known parameters alpha and beta from scaling function
+    """
+
+    # Create orderflow imbalance DataFrame from T_values and volume_imbalance_values
+    orderflow_imbalance = pd.DataFrame({"T": T_values, "imbalance": imbalance_values})
+
+    # Fit scaling form reflection where we invert the scaling function along the x-axis
+    if reflect_y:
+        orderflow_imbalance["imbalance"] = orderflow_imbalance["imbalance"] * (-1)
+
+    # Define a scaling form with known parameters
+    def _known_scaling_form(data: pd.DataFrame, RN: float, QN: float, CONST: float) -> float:
+        """
+        This version treats RN and QN as constants to be found during optimization.
+        """
+        return scaling_form(data, RN, QN, known_alpha, known_beta, CONST)
+
+    def _residuals(params, data, y):
+        return y - _known_scaling_form(data, *params)
+
+    initial_guess = [0.1, 0.1, 0.1]
+
+    result = least_squares(_residuals, initial_guess, loss="soft_l1", args=(orderflow_imbalance, R_values))
+
+    return result.x
+
+
 def fit_scaling_law(T_values, imbalance_values, R_values, reflect_y=False):
     # Construct orderflow imbalance DataFrame from T_values and volume_imbalance_values
     orderflow_imbalance = pd.DataFrame({"T": T_values, "imbalance": imbalance_values})
@@ -128,53 +121,6 @@ def fit_scaling_law(T_values, imbalance_values, R_values, reflect_y=False):
     result = least_squares(_residuals, initial_guess, loss="soft_l1", args=(orderflow_imbalance, R_values))
 
     return result.x
-
-
-def mapout_scale_factors(
-    conditional_aggregate_impact,
-    alpha,
-    beta,
-    reflect_y=False,
-    imbalance_column: str = "volume_imbalance",
-):
-    """
-    Helper function to map out the scale factors VT and RT as a function of T.
-    """
-
-    # Data preprocessing
-    _check_imbalance_validity(imbalance_column)
-
-    # Map-out scale factors
-    scale_factors = {}
-    Ts = conditional_aggregate_impact["T"].unique()
-    for T in Ts:
-        data = conditional_aggregate_impact[conditional_aggregate_impact["T"] == T][["T", imbalance_column, "R"]]
-        data.replace([np.inf, -np.inf], np.nan, inplace=True)
-        data.dropna(inplace=True)
-
-        # FIXME: q=len(conditional_aggregate_impact) for per data point precision
-        binned_data = bin_data_into_quantiles(data, x_col=imbalance_column, duplicates="drop", q=1000)
-
-        # Extract variables describing the system size T, sign Δε or volume imbalance ΔV, and observable R
-        T_values = binned_data["T"].values
-        R_values = binned_data["R"].values
-        imbalance_values = binned_data[imbalance_column].values
-
-        # Fit known scaling form
-        param = fit_known_scaling_form(
-            T_values=T_values,
-            imbalance_values=imbalance_values,
-            R_values=R_values,
-            known_alpha=alpha,
-            known_beta=beta,
-            reflect_y=reflect_y,
-        )
-
-        scale_factors[T] = ScalingFormFitResult(
-            T, param, alpha, beta, pd.DataFrame({"x": imbalance_values, "y": R_values})
-        )
-
-    return scale_factors
 
 
 def find_scaling_exponents(fitting_method: str, xy_values: pd.DataFrame, xmin_index=10) -> Fit:
@@ -259,6 +205,53 @@ def find_scale_factors(
     VT_fit_object = find_scaling_exponents(fitting_method, VT, **kwargs)
 
     return RT, VT, RT_fit_object, VT_fit_object, scale_factors
+
+
+def mapout_scale_factors(
+    conditional_aggregate_impact,
+    alpha,
+    beta,
+    reflect_y=False,
+    imbalance_column: str = "volume_imbalance",
+):
+    """
+    Helper function to map out the scale factors VT and RT as a function of T.
+    """
+
+    # Data preprocessing
+    _check_imbalance_validity(imbalance_column)
+
+    # Map-out scale factors
+    scale_factors = {}
+    Ts = conditional_aggregate_impact["T"].unique()
+    for T in Ts:
+        data = conditional_aggregate_impact[conditional_aggregate_impact["T"] == T][["T", imbalance_column, "R"]]
+        data.replace([np.inf, -np.inf], np.nan, inplace=True)
+        data.dropna(inplace=True)
+
+        # FIXME: q=len(conditional_aggregate_impact) for per data point precision
+        binned_data = bin_data_into_quantiles(data, x_col=imbalance_column, duplicates="drop", q=1000)
+
+        # Extract variables describing the system size T, sign Δε or volume imbalance ΔV, and observable R
+        T_values = binned_data["T"].values
+        R_values = binned_data["R"].values
+        imbalance_values = binned_data[imbalance_column].values
+
+        # Fit known scaling form
+        param = fit_known_scaling_form(
+            T_values=T_values,
+            imbalance_values=imbalance_values,
+            R_values=R_values,
+            known_alpha=alpha,
+            known_beta=beta,
+            reflect_y=reflect_y,
+        )
+
+        scale_factors[T] = ScalingFormFitResult(
+            T, param, alpha, beta, pd.DataFrame({"x": imbalance_values, "y": R_values})
+        )
+
+    return scale_factors
 
 
 def transform(
