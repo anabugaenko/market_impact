@@ -3,7 +3,9 @@ import pandas as pd
 
 
 # TODO: add functional form of unconditional impact R(l) and Neural network
-def scaling_function(x: np.ndarray, alpha: float, beta: float, CONST) -> np.ndarray:
+def scaling_function(
+    x: np.ndarray, alpha: float, beta: float, CONST
+) -> np.ndarray:
     """
     Apply the scaling function :math:`\mathcal{F}(x)` to a given series, defined as a sigmoidal:
 
@@ -28,7 +30,12 @@ def scaling_function(x: np.ndarray, alpha: float, beta: float, CONST) -> np.ndar
 
 
 def scaling_form(
-    orderflow_imbalance: pd.DataFrame, RN: float, QN: float, alpha: float, beta: float, CONST: float
+    orderflow_imbalance: pd.DataFrame,
+    RN: float,
+    QN: float,
+    alpha: float,
+    beta: float,
+    CONST: float,
 ) -> np.ndarray:
     """
     Apply the scaling form :math:`R(ΔV, T)` to a series of order flow imbalances. The scaling form
@@ -68,7 +75,12 @@ def scaling_form(
 
 
 def scaling_law(
-    orderflow_imbalance: pd.DataFrame, chi: float, kappa: float, alpha: float, beta: float, CONST: float
+    orderflow_imbalance: pd.DataFrame,
+    chi: float,
+    kappa: float,
+    alpha: float,
+    beta: float,
+    CONST: float,
 ) -> np.ndarray:
     """
     Apply the scaling law :math:`R'(ΔV, chi, kappa, alpha, beta)` to series of order flow imbalances. The scaling law writes:

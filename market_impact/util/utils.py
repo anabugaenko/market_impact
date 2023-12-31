@@ -4,11 +4,15 @@ from scipy import stats
 
 # Helper functions
 
+
 def _validate_imbalances(imbalance_column: str):
     """Validates if the given conditional imbalance variables is supported."""
     valid_imbalance_columns = ["sign_imbalance", "volume_imbalance"]
     if imbalance_column not in valid_imbalance_columns:
-        raise ValueError(f"Unknown imbalance column: {imbalance_column}. Expected one of {valid_imbalance_columns}.")
+        raise ValueError(
+            f"Unknown imbalance column: {imbalance_column}. Expected one of {valid_imbalance_columns}."
+        )
+
 
 def normalize_imbalances(
     orderbook_states: pd.DataFrame,
@@ -26,12 +30,16 @@ def normalize_imbalances(
     # Rescale using correspinding values
     if normalization_constant == "daily":
         if "volume_imbalance" in data.columns:
-            data["volume_imbalance"] = data["volume_imbalance"] / data["daily_vol"]
+            data["volume_imbalance"] = (
+                data["volume_imbalance"] / data["daily_vol"]
+            )
         if "sign_imbalance" in data.columns:
             data["sign_imbalance"] = data["sign_imbalance"] / data["daily_num"]
     elif normalization_constant == "volume_at_best":
         if "volume_imbalance" in data.columns:
-            data["volume_imbalance"] = data["volume_imbalance"] / data["average_vol_at_best"]
+            data["volume_imbalance"] = (
+                data["volume_imbalance"] / data["average_vol_at_best"]
+            )
     else:
         raise ValueError(
             f"Unknown normalization constant: {normalization_constant}. Expected one of {['daily','volume_at_best']}."
@@ -67,11 +75,15 @@ def normalize_aggregate_impact(aggregate_impact: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def bin_data_into_quantiles(df, x_col="volume_imbalance", y_col="R", q=100, duplicates="raise"):
+def bin_data_into_quantiles(
+    df, x_col="volume_imbalance", y_col="R", q=100, duplicates="raise"
+):
     """
     Dynmaically bins a series of data using quantile binning
     """
-    binned_x = pd.qcut(df[x_col], q=q, labels=False, retbins=True, duplicates=duplicates)
+    binned_x = pd.qcut(
+        df[x_col], q=q, labels=False, retbins=True, duplicates=duplicates
+    )
     binned_x = binned_x[0]
     df["x_bin"] = binned_x
 
@@ -87,7 +99,9 @@ def bin_data_into_quantiles(df, x_col="volume_imbalance", y_col="R", q=100, dupl
     else:
         r_binned = None
 
-    return pd.concat([x_binned, r_binned, y_binned], axis=1).reset_index(drop=True)
+    return pd.concat([x_binned, r_binned, y_binned], axis=1).reset_index(
+        drop=True
+    )
 
 
 def smooth_outliers(

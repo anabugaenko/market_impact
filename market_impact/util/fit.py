@@ -69,11 +69,15 @@ def least_squares_fit(residuals_func, initial_params, xs, ys):
     return result.x
 
 
-def powerlaw_fit(fitting_method: str, xy_values: pd.DataFrame, xmin_index=10) -> Fit:
+def powerlaw_fit(
+    fitting_method: str, xy_values: pd.DataFrame, xmin_index=10
+) -> Fit:
     """
     Determine scaling behaviour of the data  by fitting power law and comparing alternative heavy-tailed distributions
     """
     if fitting_method == "MLE":
         return Fit(xy_values, xmin_distance="BIC", xmin_index=xmin_index)
 
-    return Fit(xy_values, nonlinear_fit_method=fitting_method, xmin_distance="BIC")
+    return Fit(
+        xy_values, nonlinear_fit_method=fitting_method, xmin_distance="BIC"
+    )

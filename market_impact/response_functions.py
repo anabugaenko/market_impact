@@ -1,11 +1,17 @@
 import pandas as pd
 import numpy as np
 
-from market_impact.util.utils import normalize_imbalances, normalize_aggregate_impact
+from market_impact.util.utils import (
+    normalize_imbalances,
+    normalize_aggregate_impact,
+)
 
 
 def price_response(
-    orderbook_states: pd.DataFrame, response_col_name: str = "R1", log_prices: bool = False, conditional: bool = False
+    orderbook_states: pd.DataFrame,
+    response_col_name: str = "R1",
+    log_prices: bool = False,
+    conditional: bool = False,
 ) -> pd.DataFrame:
     """
     Compute the price response as the lag-dependent unconditional change in mid-price m(t) between time t and t + 1.
@@ -27,7 +33,9 @@ def price_response(
     # Compute returns
     if log_prices:
         # Log returns logm(t+1) − logm(t)
-        data["midprice_change"] = np.log(data["midprice"].shift(-1).fillna(0)) - np.log(data["midprice"])
+        data["midprice_change"] = np.log(
+            data["midprice"].shift(-1).fillna(0)
+        ) - np.log(data["midprice"])
     else:
         # Fractional mid-price change m(t+1) - m(t)
         data["midprice_change"] = data["midprice"].diff().shift(-1).fillna(0)
@@ -43,7 +51,9 @@ def price_response(
     return data
 
 
-def unconditional_imapact(aggregate_features: pd.DataFrame, log_prices: bool = False):
+def unconditional_imapact(
+    aggregate_features: pd.DataFrame, log_prices: bool = False
+):
     """
     Compute the generlaized unconditional aggregate impact of an order, where R(ℓ) is the price response for any lag ℓ > 0.
 
@@ -64,10 +74,14 @@ def unconditional_imapact(aggregate_features: pd.DataFrame, log_prices: bool = F
 
     # Convert 'event_timestamp' to pd.Timestamp if not already
     if type(data["event_timestamp"].iloc[0]) != pd.Timestamp:
-        data["event_timestamp"] = data["event_timestamp"].apply(lambda x: pd.Timestamp(x))
+        data["event_timestamp"] = data["event_timestamp"].apply(
+            lambda x: pd.Timestamp(x)
+        )
 
     # Compute the unconditional price impact R(ℓ)
-    data = price_response(data, response_col_name=f"Rℓ", log_prices=log_prices, conditional=False)
+    data = price_response(
+        data, response_col_name=f"Rℓ", log_prices=log_prices, conditional=False
+    )
 
     # Get lag-ℓ and correpsonding price impact
     unconditional_impact = data[["T", "Rℓ"]]
@@ -106,15 +120,21 @@ def aggregate_impact(
 
     # Convert 'event_timestamp' to pd.Timestamp if not already
     if type(data["event_timestamp"].iloc[0]) != pd.Timestamp:
-        data["event_timestamp"] = data["event_timestamp"].apply(lambda x: pd.Timestamp(x))
+        data["event_timestamp"] = data["event_timestamp"].apply(
+            lambda x: pd.Timestamp(x)
+        )
 
     # Compute the conditional aggregate impact R(ΔV, T)
-    data = price_response(data, response_col_name=f"R", log_prices=log_prices, conditional=True)
+    data = price_response(
+        data, response_col_name=f"R", log_prices=log_prices, conditional=True
+    )
 
     # Normalize price impact and imbalance each day by the corresponding values
     data = normalize_aggregate_impact(data)
     data = normalize_imbalances(
-        data, normalization_constant=normalization_constant, conditional_variable=conditional_variable
+        data,
+        normalization_constant=normalization_constant,
+        conditional_variable=conditional_variable,
     )
 
     # Get system sizes T, imbalance Δ, and observable R
