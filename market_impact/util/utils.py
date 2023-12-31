@@ -2,48 +2,58 @@ import numpy as np
 import pandas as pd
 from scipy import stats
 
+# Helper functions
 
-def _check_imbalance_validity(imbalance_column: str):
-    """
-    Validates if the given conditional variables are supported.
-    """
+def _validate_imbalances(imbalance_column: str):
+    """Validates if the given conditional imbalance variables is supported."""
     valid_imbalance_columns = ["sign_imbalance", "volume_imbalance"]
     if imbalance_column not in valid_imbalance_columns:
         raise ValueError(f"Unknown imbalance column: {imbalance_column}. Expected one of {valid_imbalance_columns}.")
 
+def normalize_imbalances(
+    orderbook_states: pd.DataFrame,
+    normalization_constant: str = "daily",
+    conditional_variable: str = "volume_imbalance",
+) -> pd.DataFrame:
+    """
+    Rescale imblance each day by corresponding daily values signed volume V_D, daily number ε_D, or avg volume at best V_best.
+    """
 
-def normalize_imbalances(orderbook_states: pd.DataFrame, normalization_constant: str = "daily_volume") -> pd.DataFrame:
-    # TODO: add option to normalise by average volume at top of queue, make consistent with normalze_size
+    # Data preprocessing
     data = orderbook_states.copy()
+    _validate_imbalances(imbalance_column=conditional_variable)
 
-    # Rescale imbalance columns
-    if "volume_imbalance" in data.columns:
-        data["volume_imbalance"] = data["volume_imbalance"] / data["daily_vol"]
-    if "sign_imbalance" in data.columns:
-        data["sign_imbalance"] = data["sign_imbalance"] / data["daily_num"]
+    # Rescale using correspinding values
+    if normalization_constant == "daily":
+        if "volume_imbalance" in data.columns:
+            data["volume_imbalance"] = data["volume_imbalance"] / data["daily_vol"]
+        if "sign_imbalance" in data.columns:
+            data["sign_imbalance"] = data["sign_imbalance"] / data["daily_num"]
+    elif normalization_constant == "volume_at_best":
+        if "volume_imbalance" in data.columns:
+            data["volume_imbalance"] = data["volume_imbalance"] / data["average_vol_at_best"]
+    else:
+        raise ValueError(
+            f"Unknown normalization constant: {normalization_constant}. Expected one of {['daily','volume_at_best']}."
+        )
 
     return data
 
 
-def normalize_conditional_impact(aggregate_impact: pd.DataFrame) -> pd.DataFrame:
+def normalize_aggregate_impact(aggregate_impact: pd.DataFrame) -> pd.DataFrame:
     """
-    Rescale the aggregate impact 'R' in the provided DataFrame by its daily corresponding value 'R(1)'.
+    Rescale the aggregate impact 'R' in the provided DataFrame by its corresponding daily value 'R(1)'.
 
-    The function assumes that the DataFrame contains the columns 'R' for aggregate impact and 'daily_R1'
-    that defines a characteristic size or length. The normalization is performed by dividing 'R' by the
-     absolute value of 'daily_R1', where we use 'abs' to preserve the sign when the average order signs
-     are negative.
-
-    Parameters:
-    - aggregate_impact (pd.DataFrame): DataFrame containing the aggregate impact data.
-      Expected to have columns 'R' and 'daily_R1'.
+    Args:
+        aggregate_impact (pd.DataFrame): DataFrame containing the aggregate impact data.
 
     Returns:
-    - pd.DataFrame: DataFrame with the normalized 'R' values.
+        normalized_agggregate_impact (pd.DataFrame): DataFrame with the normalized 'R' values.
 
     Note:
-    - It is assumed that 'daily_R1' represents a constant of unit dimension that define a
-      character size or length (base value) for normalization.
+        We use 'abs' to preserve the sign when the average order signs are negative.
+        Assumed that the input DataFrame containts aggregat impact `R`, and `daily_R1` that represents a
+        constant of unit dimension that define a characterstic size or length (base value) for normalization.
     """
 
     # Creating a copy to avoid modifying the original DataFrame
@@ -59,7 +69,7 @@ def normalize_conditional_impact(aggregate_impact: pd.DataFrame) -> pd.DataFrame
 
 def bin_data_into_quantiles(df, x_col="volume_imbalance", y_col="R", q=100, duplicates="raise"):
     """
-    Returns binned series.
+    Dynmaically bins a series of data using quantile binning
     """
     binned_x = pd.qcut(df[x_col], q=q, labels=False, retbins=True, duplicates=duplicates)
     binned_x = binned_x[0]
