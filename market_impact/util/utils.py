@@ -2,11 +2,11 @@ import numpy as np
 import pandas as pd
 from scipy import stats
 
-# Helper functions
-
 
 def _validate_imbalances(imbalance_column: str):
-    """Validates if the given conditional imbalance variables is supported."""
+    """
+    Validates if the given imbalance variables is supported.
+    """
     valid_imbalance_columns = ["sign_imbalance", "volume_imbalance"]
     if imbalance_column not in valid_imbalance_columns:
         raise ValueError(
@@ -20,9 +20,9 @@ def normalize_imbalances(
     conditional_variable: str = "volume_imbalance",
 ) -> pd.DataFrame:
     """
-    Rescale imblance each day by corresponding daily values signed volume V_D, daily number ε_D, or avg volume at best V_best.
+    Rescale imblance each day by corresponding values, daily volume `V_D`, daily number `ε_D`, or avg volume at best `V_best`.
     """
-
+    # TODO: implement normalize by average_num_at_best
     # Data preprocessing
     data = orderbook_states.copy()
     _validate_imbalances(imbalance_column=conditional_variable)
@@ -30,9 +30,7 @@ def normalize_imbalances(
     # Rescale using correspinding values
     if normalization_constant == "daily":
         if "volume_imbalance" in data.columns:
-            data["volume_imbalance"] = (
-                data["volume_imbalance"] / data["daily_vol"]
-            )
+            data["volume_imbalance"] = data["volume_imbalance"] / data["daily_vol"]
         if "sign_imbalance" in data.columns:
             data["sign_imbalance"] = data["sign_imbalance"] / data["daily_num"]
     elif normalization_constant == "volume_at_best":
@@ -50,7 +48,7 @@ def normalize_imbalances(
 
 def normalize_aggregate_impact(aggregate_impact: pd.DataFrame) -> pd.DataFrame:
     """
-    Rescale the aggregate impact 'R' in the provided DataFrame by its corresponding daily value 'R(1)'.
+    Rescale the aggregate impact 'R' in the provided DataFrame by its corresponding daily value `daily_R1`.
 
     Args:
         aggregate_impact (pd.DataFrame): DataFrame containing the aggregate impact data.
@@ -67,7 +65,7 @@ def normalize_aggregate_impact(aggregate_impact: pd.DataFrame) -> pd.DataFrame:
     # Creating a copy to avoid modifying the original DataFrame
     df = aggregate_impact.copy()
 
-    # Normalizing 'R' by its daily corresponding value 'R(1)' (represented as 'daily_R1')
+    # Normalizing R by its daily corresponding value daily_R1
     if "R" in df.columns:
         # Ensure that the signs of 'R' aren't inverted
         df["R"] = df["R"] / abs(df["daily_R1"])
@@ -81,9 +79,7 @@ def bin_data_into_quantiles(
     """
     Dynmaically bins a series of data using quantile binning
     """
-    binned_x = pd.qcut(
-        df[x_col], q=q, labels=False, retbins=True, duplicates=duplicates
-    )
+    binned_x = pd.qcut(df[x_col], q=q, labels=False, retbins=True, duplicates=duplicates)
     binned_x = binned_x[0]
     df["x_bin"] = binned_x
 
@@ -99,9 +95,7 @@ def bin_data_into_quantiles(
     else:
         r_binned = None
 
-    return pd.concat([x_binned, r_binned, y_binned], axis=1).reset_index(
-        drop=True
-    )
+    return pd.concat([x_binned, r_binned, y_binned], axis=1).reset_index(drop=True)
 
 
 def smooth_outliers(

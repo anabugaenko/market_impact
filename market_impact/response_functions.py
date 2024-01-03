@@ -17,7 +17,7 @@ def price_response(
     Compute the price response as the lag-dependent unconditional change in mid-price m(t) between time t and t + 1.
 
     ..math::
-        \mathcal{R}(1) \vcentcolon = \langle  \varepsilon_t \cdot ( m_{t + 1} - m_t)\vert \rangle_t,
+        \\mathcal{R}(1) \vcentcolon = \\langle  \varepsilon_t \\cdot ( m_{t + 1} - m_t)\vert \rangle_t,
 
     Args
         orderbook_states (pd.DataFrame): DataFrame containing order book states.
@@ -26,21 +26,18 @@ def price_response(
         conditional (bool): Whether to compute the conditional or uconditional impact. Default is False.
 
     Returns
-        data (pd.DataFrame): Orderbook states DataFrame updated with lag-1 unconditional response function R(1).
+        data (pd.DataFrame): Orderbook states DataFrame updated with lag-1 unconditional impact R(1).
     """
     data = orderbook_states.copy()
 
     # Compute returns
     if log_prices:
-        # Log returns logm(t+1) − logm(t)
-        data["midprice_change"] = np.log(
-            data["midprice"].shift(-1).fillna(0)
-        ) - np.log(data["midprice"])
+        data["midprice_change"] = np.log(data["midprice"].shift(-1).fillna(0)) - np.log(
+            data["midprice"]
+        )
     else:
-        # Fractional mid-price change m(t+1) - m(t)
         data["midprice_change"] = data["midprice"].diff().shift(-1).fillna(0)
 
-    # Compute conditional or unconditional impact
     if conditional:
         # Sign already accounted for in the conditioning variable
         data[response_col_name] = data["midprice_change"]
@@ -51,39 +48,34 @@ def price_response(
     return data
 
 
-def unconditional_imapact(
-    aggregate_features: pd.DataFrame, log_prices: bool = False
-):
+def unconditional_imapact(aggregate_features: pd.DataFrame, log_prices: bool = False):
     """
-    Compute the generlaized unconditional aggregate impact of an order, where R(ℓ) is the price response for any lag ℓ > 0.
+    Compute the generlaized unconditional aggregate impact of an order, where R(ℓ) is the price change for any lag ℓ > 0.
 
     ..math::
-        \mathcal{R}(\ell) \vcentcolon = \langle  \varepsilon_t \cdot ( m_{t + \ell} - m_t)\vert \rangle_t.
+        \\mathcal{R}(\\ell) \vcentcolon = \\langle  \varepsilon_t \\cdot ( m_{t + \\ell} - m_t)\vert \rangle_t.
 
     Args:
         aggregate_features (pd.DataFrame): DataFrame containing orderbook features, aggregated over lagged frequencies ℓ.
         log_prices (bool): If True, uses logarithm of mid-prices for the impact computation. Default is False.
 
     Returns:
-        unconditional_aggregate_impact (pd.DataFrame): DataFrame containing unconditional impact ["lag", "Rℓ"]
+        unconditional_impact (pd.DataFrame): DataFrame containing unconditional impact ["lag", "Rℓ"]
 
     Note:
         The function assumes 'event_timestamp' to be in a format convertible to pd.Timestamp.
     """
+    # FIXME: ensure we compute on a daily basis
     data = aggregate_features.copy()
 
     # Convert 'event_timestamp' to pd.Timestamp if not already
     if type(data["event_timestamp"].iloc[0]) != pd.Timestamp:
-        data["event_timestamp"] = data["event_timestamp"].apply(
-            lambda x: pd.Timestamp(x)
-        )
+        data["event_timestamp"] = data["event_timestamp"].apply(lambda x: pd.Timestamp(x))
 
     # Compute the unconditional price impact R(ℓ)
     data = price_response(
         data, response_col_name=f"Rℓ", log_prices=log_prices, conditional=False
     )
-
-    # Get lag-ℓ and correpsonding price impact
     unconditional_impact = data[["T", "Rℓ"]]
     unconditional_impact.rename(columns={"T": "lag"}, inplace=True)
 
@@ -97,21 +89,21 @@ def aggregate_impact(
     conditional_variable: str = "volume_imbalance",
 ) -> pd.DataFrame:
     """
-    Computes the aggregate impact of an order, where  we consider the conditional aggregate impact of an order
-    by taking the averge price change over the interval [t, t + T ), conditioned to a certain order-flow imbalance.
+    Computes the conditional aggregate impact of an order, where we calculate returns of an order by taking
+    the averge price change over the time interval [t, t + T ), conditioned to a certain order-flow imbalance.
 
     .. math::
 
-        R(\Delta V^\prime , T) \vcentcolon = \langle m_{t+T} - m_t\vert \Delta V^\prime \rangle.
+        R(\\Delta V^\\prime , T) \vcentcolon = \langle m_{t+T} - m_t\vert \\Delta V^\\prime \rangle.
 
     Args:
-        aggregate_features (pd.DataFrame): DataFrame containing orderbook features, aggregated over binning frequencies T.
+        aggregate_features (pd.DataFrame): DataFrame containing orderbook features, aggregated over bin frequencies T.
         log_prices (bool): If True, uses logarithm of mid-prices for the impact computation. Default is False.
-        normalization_constant (str): Whether to normalize the data by correpsonding daily or average values. Default is "daily".
-        conditional_variable (str): The variable on which to condition on (i.e., sign imbalance Δε or volume imbalance ΔV).
+        normalization_constant (str): Normalize the data by corresponding daily or average values. Default is "daily".
+        conditional_variable (str): The variable on which to condition on (i.e., sign Δε or volume imbalance ΔV).
 
     Returns:
-        conditonal_aggregate_impact (pd.DataFrame): DataFrame containing conditional aggregate impact ["T", "imbalance", "R"]
+        aggregate_impact (pd.DataFrame): DataFrame containing aggregate impact ["T", "imbalance", "R"]
 
     Note:
         The conditioning variables already accounts for the sign by definition.
@@ -120,9 +112,7 @@ def aggregate_impact(
 
     # Convert 'event_timestamp' to pd.Timestamp if not already
     if type(data["event_timestamp"].iloc[0]) != pd.Timestamp:
-        data["event_timestamp"] = data["event_timestamp"].apply(
-            lambda x: pd.Timestamp(x)
-        )
+        data["event_timestamp"] = data["event_timestamp"].apply(lambda x: pd.Timestamp(x))
 
     # Compute the conditional aggregate impact R(ΔV, T)
     data = price_response(
@@ -136,8 +126,6 @@ def aggregate_impact(
         normalization_constant=normalization_constant,
         conditional_variable=conditional_variable,
     )
-
-    # Get system sizes T, imbalance Δ, and observable R
     if conditional_variable == "sign_imbalance":
         aggregate_impact = data[["T", "sign_imbalance", "R"]]
     else:
