@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 
-from market_impact.util.utils import (
+from market_impact.util.data_utils import (
     normalize_imbalances,
     normalize_aggregate_impact,
 )
@@ -30,11 +30,9 @@ def price_response(
     """
     data = orderbook_states.copy()
 
-    # Compute returns
+    # Compute log or fractional returns
     if log_prices:
-        data["midprice_change"] = np.log(data["midprice"].shift(-1).fillna(0)) - np.log(
-            data["midprice"]
-        )
+        data["midprice_change"] = np.log(data["midprice"].shift(-1).fillna(0)) - np.log(data["midprice"])
     else:
         data["midprice_change"] = data["midprice"].diff().shift(-1).fillna(0)
 
@@ -60,12 +58,12 @@ def unconditional_imapact(aggregate_features: pd.DataFrame, log_prices: bool = F
         log_prices (bool): If True, uses logarithm of mid-prices for the impact computation. Default is False.
 
     Returns:
-        unconditional_impact (pd.DataFrame): DataFrame containing unconditional impact ["lag", "Rℓ"]
+        unconditional_impact (pd.DataFrame): DataFrame containing unconditional impact ["lag", "Rℓ"].
 
     Note:
         The function assumes 'event_timestamp' to be in a format convertible to pd.Timestamp.
     """
-    # FIXME: ensure we compute on a daily basis
+    # FIXME: ensure we compute R(ℓ) on a daily basis to avoid propagation of errors
     data = aggregate_features.copy()
 
     # Convert 'event_timestamp' to pd.Timestamp if not already
@@ -103,7 +101,7 @@ def aggregate_impact(
         conditional_variable (str): The variable on which to condition on (i.e., sign Δε or volume imbalance ΔV).
 
     Returns:
-        aggregate_impact (pd.DataFrame): DataFrame containing aggregate impact ["T", "imbalance", "R"]
+        aggregate_impact (pd.DataFrame): DataFrame containing aggregate impact ["T", "imbalance", "R"].
 
     Note:
         The conditioning variables already accounts for the sign by definition.
@@ -114,18 +112,14 @@ def aggregate_impact(
     if type(data["event_timestamp"].iloc[0]) != pd.Timestamp:
         data["event_timestamp"] = data["event_timestamp"].apply(lambda x: pd.Timestamp(x))
 
-    # Compute the conditional aggregate impact R(ΔV, T)
-    data = price_response(
-        data, response_col_name=f"R", log_prices=log_prices, conditional=True
-    )
+    data = price_response(data, response_col_name=f"R", log_prices=log_prices, conditional=True)
 
-    # Normalize price impact and imbalance each day by the corresponding values
+    # Normalize R and imbalance by corresponding values
     data = normalize_aggregate_impact(data)
-    data = normalize_imbalances(
-        data,
-        normalization_constant=normalization_constant,
-        conditional_variable=conditional_variable,
-    )
+    data = normalize_imbalances(data, normalization_constant=normalization_constant,
+        conditional_variable=conditional_variable)
+
+    # Return R conditioned to a certain imbalance
     if conditional_variable == "sign_imbalance":
         aggregate_impact = data[["T", "sign_imbalance", "R"]]
     else:

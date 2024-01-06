@@ -3,7 +3,7 @@ import pandas as pd
 from powerlaw_function import Fit
 from typing import Optional, List, Dict, Tuple
 
-from market_impact.util.utils import (
+from market_impact.util.data_utils import (
     bin_data_into_quantiles,
     _validate_imbalances,
 )
@@ -20,6 +20,7 @@ def mapout_scale_factors(
     aggregate_impact_data: pd.DataFrame,
     alpha: float,
     beta: float,
+    q: int = 100,
     reflect_y: bool = False,
     imbalance_column: str = "volume_imbalance",
     initial_params: Optional[np.ndarray] = None,
@@ -32,6 +33,7 @@ def mapout_scale_factors(
         aggregate_impact_data (pd.DataFrame): DataFrame containing the aggregate impact data.
         alpha (float): Known alpha parameter from the scaling function.
         beta (float): Known beta parameter from the scaling function.
+        q (int): Number of quantiles to bin the data into for precision. Default is 100.
         reflect_y (bool): If True, reflects the scaling function along the x-axis. Default is False.
         imbalance_column (str): Column name in the DataFrame for the order flow imbalance data.
         initial_params (Optional[np.ndarray]): Initial guess for the scale factors. Default is None.
@@ -54,18 +56,12 @@ def mapout_scale_factors(
         data.dropna(inplace=True)
 
         # FIXME: q should be input param, where q=len(conditional_aggregate_impact) for per data point precision
-        binned_data = bin_data_into_quantiles(
-            data, x_col=imbalance_column, duplicates="drop", q=1000
-        )
+        binned_data = bin_data_into_quantiles(data, x_col=imbalance_column, y_col="R", duplicates="drop", q=q)
 
-        # Extract observables describing the system
-        R_values = data["R"].values  # physical quantity R
-        T_values = data["T"].values  # system size T
-        imbalance_values = data[
-            imbalance_column
-        ].values  # temperature (sign Δε or volume imbalance ΔV)
+        R_values = data["R"].values
+        T_values = data["T"].values
+        imbalance_values = data[imbalance_column].values
 
-        # Fit scaling form with known shape parameters paramters
         param = fit_known_scaling_form(
             T_values=T_values,
             imbalance_values=imbalance_values,
@@ -76,14 +72,8 @@ def mapout_scale_factors(
             initial_params=initial_params,
         )
 
-        # Store optimization results for each bin frequency T
-        scale_factors[T] = ScalingFormFitResult(
-            T,
-            param,
-            alpha,
-            beta,
-            pd.DataFrame({"x": imbalance_values, "y": R_values}),
-        )
+        scale_factors[T] = ScalingFormFitResult(T, param, alpha,beta,
+            pd.DataFrame({"x": imbalance_values, "y": R_values}))
 
     return scale_factors
 
@@ -125,14 +115,10 @@ def find_shape_parameters(
     data = aggregate_impact_data.copy()
     _validate_imbalances(imbalance_column)
 
-    # Extract observables describing the system
-    R_values = data["R"].values  # physical quantity R
-    T_values = data["T"].values  # system size T
-    imbalance_values = data[
-        imbalance_column
-    ].values  # temperature (sign Δε or volume imbalance ΔV)
+    R_values = data["R"].values
+    T_values = data["T"].values
+    imbalance_values = data[imbalance_column].values
 
-    # Find scaling function shape parameters alpha and beta by fitting the scaling form or its reflection
     RN, QN, alpha, beta = fit_scaling_form(
         T_values,
         imbalance_values,
@@ -149,6 +135,7 @@ def find_scale_factors(
     aggregate_impact_data: pd.DataFrame,
     alpha: float,
     beta: float,
+    q: int = 100,
     reflect_y: bool = False,
     fitting_method: str = "MLE",
     imbalance_column: str = "volume_imbalance",
@@ -162,6 +149,7 @@ def find_scale_factors(
         aggregate_impact_data (pd.DataFrame): DataFrame containing the aggregate impact data.
         alpha (float): Known alpha parameter from the scaling function.
         beta (float): Known beta parameter from the scaling function.
+        q (int): Number of quantiles to bin the data into for precision. Default is 100.
         reflect_y (bool): If True, reflects the scaling function along the x-axis.
         fitting_method (str): Method used for power-law fitting.
         imbalance_column (str): Column name in the DataFrame for order flow imbalance data.
@@ -177,17 +165,9 @@ def find_scale_factors(
     data = aggregate_impact_data.copy()
     _validate_imbalances(imbalance_column)
 
-    # Map out scale factors RT and VT for each T
-    scale_factors = mapout_scale_factors(
-        data,
-        alpha,
-        beta,
-        reflect_y=reflect_y,
-        imbalance_column=imbalance_column,
-    )
+    scale_factors = mapout_scale_factors(data, alpha, beta, q=q, reflect_y=reflect_y, imbalance_column=imbalance_column)
 
     # FIXME: is this correct order for VT and RT series
-    # Retrieve rescaling exponents ξ and ψ
     RT_series = []
     VT_series = []
     for lag, result in scale_factors.items():
@@ -199,7 +179,6 @@ def find_scale_factors(
     scaled_RT = [r * lag for r, lag in zip(RT_series, bin_size)]
     scaled_VT = [r * lag for r, lag in zip(VT_series, bin_size)]
 
-    # Prepare data for fit and determine scaling behaviour of RT and VT
     RT = pd.DataFrame({"x_values": bin_size, "y_values": scaled_RT})
     VT = pd.DataFrame({"x_values": bin_size, "y_values": scaled_VT})
     RT_fit_object = find_critical_exponents(RT, fitting_method, **kwargs)
@@ -234,35 +213,30 @@ def transform(
     Note:
          The data should return similar shape parameters for the different binning frequencies following renormalization.
     """
-    df = aggregate_impact_data.copy()
+    data = aggregate_impact_data.copy()
     _validate_imbalances(imbalance_column)
 
     chi, kappa, alpha, beta, CONST = master_curve_params
     rescale_params = {}
     for T in durations:
-        result = df[df["T"] == T][["T", imbalance_column, "R"]]
+        new_data = data[data["T"] == T][["T", imbalance_column, "R"]]
 
-        result[imbalance_column] = result[imbalance_column] / np.power(T, kappa)
-        result["R"] = result["R"] / np.power(T, chi)
-        new_data = bin_data_into_quantiles(
-            result, x_col=imbalance_column, q=q, duplicates="drop"
-        )
+        # Apply trasnformation
+        new_data[imbalance_column] = new_data[imbalance_column] / np.power(T, kappa)
+        new_data["R"] = new_data["R"] / np.power(T, chi)
+        binned_data = bin_data_into_quantiles(new_data, x_col=imbalance_column, y_col="R", q=q, duplicates="drop")
 
-        # Extract observables describing the system
-        R_values = new_data["R"].values  # physical quantity R
-        T_values = new_data["T"].values  # system size T
-        imbalance_values = new_data[
-            imbalance_column
-        ].values  # temperature (sign Δε or volume imbalance ΔV)
+        # Prepare rescaled data for fitting
+        R_values = binned_data["R"].values
+        T_values = binned_data["T"].values
+        imbalance_values = binned_data[imbalance_column].values
 
-        # Retrieve new rescaled parameters
-        rescale_param = fit_scaling_law(
-            T_values, imbalance_values, R_values, reflect_y=reflect_y
-        )
+        # Rescaled parameters
+        rescaled_param = fit_scaling_law(T_values, imbalance_values, R_values, reflect_y=reflect_y)
 
         # Store rescaled parameters and data for each bin_size T
-        if rescale_param[0] is not None:
-            rescale_params[T] = ScalingLawFitResult(T, rescale_param, new_data)
+        if rescaled_param[0] is not None:
+            rescale_params[T] = ScalingLawFitResult(T, rescaled_param, new_data)
         else:
             print(f"Failed to fit for lag {T}")
 

@@ -1,13 +1,12 @@
 import warnings
+import numpy as np
 from typing import List, Callable, Any, Union, Tuple
 
-import numpy as np
 from scipy.optimize import least_squares
+
 
 # TODO: add gadient based optimization method for neural network .
 # FIXME: least square bounds seem to be required for scaling law but for the scaling form, it depends.
-
-
 def least_squares_fit(
     x_values: List[float],
     y_values: List[float],
@@ -43,7 +42,7 @@ def least_squares_fit(
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore")
 
-            # Set bounds
+            # Set optimal bounds
             if bounds:
                 bounds = bounds
             else:

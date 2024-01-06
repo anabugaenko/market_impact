@@ -1,9 +1,9 @@
 import numpy as np
 import pandas as pd
-from typing import List, Optional
+from typing import Optional, List, Dict
 
 from market_impact.function_form import scaling_form, scaling_law
-from market_impact.util.optimize import least_squares_fit
+from market_impact.util.estimators import least_squares_fit
 
 
 # FIXME: bring ScalingFormFitResult and ScalingLawFitResult in line with respect to constructor and return params
@@ -60,30 +60,27 @@ def fit_known_scaling_form(
     known_alpha: float,
     known_beta: float,
     reflect_y: bool = False,
-    initial_params: Optional[List[float]] = None,
-) -> dict:
+    initial_params: Optional[List[float]] = None) -> dict:
     """
     Fits a scaling form with known parameters alpha `α` and beta `β` from the scaling function.
+
+    Note:
+        If reflect=True, fits scaling form reflection where we invert the scaling function along the x-axis.
     """
     orderflow_imbalance = pd.DataFrame({"T": T_values, "imbalance": imbalance_values})
 
-    # Fit scaling form reflection where we invert the scaling function along the x-axis
     if reflect_y:
         orderflow_imbalance["imbalance"] = orderflow_imbalance["imbalance"] * (-1)
 
     # Define a scaling form with known parameters
     def _known_scaling_form(data: pd.DataFrame, RN: float, QN: float) -> float:
         """
-        This version treats RN and QN as optimization paramters
-        to be found whilst fixing alpha and beta as constants.
+        This version treats RN and QN as optimization paramters to be found whilst fixing alpha and beta as constants.
         """
         return scaling_form(data, RN, QN, known_alpha, known_beta)
 
-    # Intial parameters
-    if not initial_params:
-        initial_params = [0.1, 0.1]
-
     # Perform least squares optimization
+    if not initial_params: initial_params = [0.1, 0.1]
     residuals, params, fitted_values = least_squares_fit(
         x_values=orderflow_imbalance,
         y_values=R_values,
@@ -101,8 +98,7 @@ def fit_scaling_form(
     imbalance_values: List[float],
     R_values: List[float],
     reflect_y: bool = False,
-    initial_params: Optional[List[float]] = None,
-) -> dict:
+    initial_params: Optional[List[float]] = None) -> dict:
     """
     Fit a scaling form to the aggregate impact R(ΔV, T) data using chosen optimization method.
 
@@ -117,19 +113,16 @@ def fit_scaling_form(
         dict: A dictionary containing the optimized parameters 'RN', 'QN', 'alpha', 'beta', and 'CONST'.
 
     Notes:
+        If reflect=True, fits scaling form reflection where we invert the scaling function along the x-axis.
         The function uses a neural network or the method of least squares to find the optimal scaling form parameters.
     """
     orderflow_imbalance = pd.DataFrame({"T": T_values, "imbalance": imbalance_values})
 
-    # Fit scaling form reflection where we invert the scaling function along the x-axis
     if reflect_y:
         orderflow_imbalance["imbalance"] = orderflow_imbalance["imbalance"] * (-1)
 
-    # Initial parameters
-    if not initial_params:
-        initial_params = [1, 0.1, 1, 1]
-
     # Perform least squares optimization
+    if not initial_params: initial_params = [1, 0.1, 1, 1]
     residuals, params, fitted_values = least_squares_fit(
         x_values=orderflow_imbalance,
         y_values=R_values,
@@ -138,12 +131,16 @@ def fit_scaling_form(
         bounds=(-np.inf, np.inf),
     )
     result = params
+
     return result
 
 
 def fit_scaling_law(
-    T_values, imbalance_values, R_values, reflect_y=False, initial_params=None
-):
+    T_values: List[float],
+    imbalance_values: List[float],
+    R_values: List[float],
+    reflect_y: bool = True,
+    initial_params: List[float] = None) -> Dict:
     """
      Fit a scaling law to the renormalized aggregate impact R(ΔV, T) data using chosen optimization method.
 
@@ -159,26 +156,17 @@ def fit_scaling_law(
 
     Note:
         Assumes the conditional aggregate impact data ["T", "imbalance", "R"] has been renormalized.
+        If reflect=True, fits scaling form reflection where we invert the scaling function along the x-axis.
     """
 
     # Construct orderflow imbalance DataFrame from T_values and volume_imbalance_values
     orderflow_imbalance = pd.DataFrame({"T": T_values, "imbalance": imbalance_values})
 
-    # Fit scaling form reflection where we invert the scaling function along the x-axis
     if reflect_y:
         orderflow_imbalance["imbalance"] = orderflow_imbalance["imbalance"] * (-1)
 
-        # Model predictions
-        predicted = scaling_law(orderflow_imbalance, chi, kappa, alpha, beta, CONST)
-
-        # Return the residuals
-        return R_values - predicted
-
-    # Initial parameters
-    if not initial_params:
-        initial_params = [0.5, 0.5, 0.1, 0.1, 1]
-
     # Perform least squares optimization
+    if not initial_params: initial_params = [0.5, 0.5, 0.1, 0.1, 1]
     residuals, params, fitted_values = least_squares_fit(
         x_values=orderflow_imbalance,
         y_values=R_values,
